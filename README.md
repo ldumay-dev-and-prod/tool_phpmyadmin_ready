@@ -6,10 +6,21 @@ Dépôt d'utilisation de phpmyadmin prêt à l'emploi.
 
 PHP : **8.1**
 
+
+- Environnement Php :
+	- Composer: 2.8.9
+	- Php: 8.4.7
+		- Zend Engine: v4.4.7
+			- with Xdebug: v3.4.1
+			- with Zend OPcache: v8.4.7
+- Environnement JS :
+	- Node: 22.17.1
+	- Npm: 10.9.2
+
 ## 2 - Chargement de composer
 
 ```
-composer install
+composer install && npm install
 ```
 
 ## 3 - Configuration du fichier `config.inc.php`
