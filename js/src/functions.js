@@ -10,7 +10,7 @@
 
 /**
  * general function, usually for data manipulation pages
- *
+ * @test-module Functions
  */
 var Functions = {};
 
@@ -430,7 +430,7 @@ Functions.escapeJsString = function (unsafe) {
  * @return {string}
  */
 Functions.escapeBacktick = function (s) {
-    return s.replace('`', '``');
+    return s.replaceAll('`', '``');
 };
 
 /**
@@ -438,7 +438,7 @@ Functions.escapeBacktick = function (s) {
  * @return {string}
  */
 Functions.escapeSingleQuote = function (s) {
-    return s.replace('\\', '\\\\').replace('\'', '\\\'');
+    return s.replaceAll('\\', '\\\\').replaceAll('\'', '\\\'');
 };
 
 Functions.sprintf = function () {
@@ -516,7 +516,7 @@ Functions.checkPasswordStrength = function (value, meterObject, meterObjectLabel
         'my',
         'admin',
     ];
-    if (username !== null) {
+    if (username) {
         customDict.push(username);
     }
 
@@ -584,7 +584,11 @@ Functions.suggestPassword = function (passwordForm) {
     passwordForm.elements.pma_pw2.value = passwd.value;
     var meterObj = $jQueryPasswordForm.find('meter[name="pw_meter"]').first();
     var meterObjLabel = $jQueryPasswordForm.find('span[name="pw_strength"]').first();
-    Functions.checkPasswordStrength(passwd.value, meterObj, meterObjLabel);
+    var username = '';
+    if (passwordForm.elements.username) {
+        username = passwordForm.elements.username.value;
+    }
+    Functions.checkPasswordStrength(passwd.value, meterObj, meterObjLabel, username);
     return true;
 };
 
@@ -1131,15 +1135,10 @@ Functions.setQuery = function (query) {
  * @return {void}
  */
 Functions.handleSimulateQueryButton = function () {
-    var updateRegExp = new RegExp('^\\s*UPDATE\\s+((`[^`]+`)|([A-Za-z0-9_$]+))\\s+SET\\s', 'i');
-    var deleteRegExp = new RegExp('^\\s*DELETE\\s+FROM\\s', 'i');
-    var query = '';
+    var updateRegExp = /^\s*UPDATE\b\s*(((`([^`]|``)+`)|([a-z0-9_$]+))\s*\.\s*)?((`([^`]|``)+`)|([a-z0-9_$]+))\s*\bSET\b/i;
+    var deleteRegExp = /^\s*DELETE\b\s*((((`([^`]|``)+`)|([a-z0-9_$]+))\s*\.\s*)?((`([^`]|``)+`)|([a-z0-9_$]+))\s*)?\bFROM\b/i;
 
-    if (codeMirrorEditor) {
-        query = codeMirrorEditor.getValue();
-    } else {
-        query = $('#sqlquery').val();
-    }
+    var query = codeMirrorEditor ? codeMirrorEditor.getValue() : $('#sqlquery').val();
 
     var $simulateDml = $('#simulate_dml');
     if (updateRegExp.test(query) || deleteRegExp.test(query)) {
@@ -1215,7 +1214,7 @@ Functions.insertQuery = function (queryType) {
 
     var query = '';
     var myListBox = document.sqlform.dummy;
-    table = document.sqlform.table.value;
+    table = Functions.escapeBacktick(document.sqlform.table.value);
 
     if (myListBox.options.length > 0) {
         sqlBoxLocked = true;
@@ -1345,7 +1344,7 @@ Functions.updateQueryParameters = function () {
  */
 Functions.getForeignKeyCheckboxLoader = function () {
     var html = '';
-    html    += '<div>';
+    html    += '<div class="mt-1 mb-2">';
     html    += '<div class="load-default-fk-check-value">';
     html    += Functions.getImage('ajax_clock_small');
     html    += '</div>';
@@ -2082,6 +2081,7 @@ $(function () {
 
     $(document).on('click', 'a.copyQueryBtn', function (event) {
         event.preventDefault();
+
         var res = Functions.copyToClipboard($(this).attr('data-text'));
         if (res) {
             $(this).after('<span id=\'copyStatus\'> (' + Messages.strCopyQueryButtonSuccess + ')</span>');
@@ -2091,6 +2091,24 @@ $(function () {
         setTimeout(function () {
             $('#copyStatus').remove();
         }, 2000);
+    });
+
+    $(document).on('mouseover mouseleave', '.ajax_notification a', function (event) {
+        let message = Messages.strDismiss;
+
+        if (event.type === 'mouseover') {
+            message = $(this).hasClass('copyQueryBtn') ? Messages.strCopyToClipboard : Messages.strEditQuery;
+        }
+
+        Functions.tooltip(
+            $('.ajax_notification'),
+            'span',
+            message
+        );
+    });
+
+    $(document).on('mouseup', '.ajax_notification a', function (event) {
+        event.stopPropagation();
     });
 });
 
@@ -2401,7 +2419,7 @@ Functions.confirm = function (question, url, callbackFn, openCallback) {
     var buttonOptions = [
         {
             text: Messages.strOK,
-            'class': 'submitOK',
+            'class': 'btn btn-primary submitOK',
             click: function () {
                 $(this).dialog('close');
                 if (typeof callbackFn === 'function') {
@@ -2411,7 +2429,7 @@ Functions.confirm = function (question, url, callbackFn, openCallback) {
         },
         {
             text: Messages.strCancel,
-            'class': 'submitCancel',
+            'class': 'btn btn-secondary submitCancel',
             click: function () {
                 $(this).dialog('close');
             }
@@ -2421,6 +2439,9 @@ Functions.confirm = function (question, url, callbackFn, openCallback) {
     $('<div></div>', { 'id': 'confirm_dialog', 'title': Messages.strConfirm })
         .prepend(question)
         .dialog({
+            classes: {
+                'ui-dialog-titlebar-close': 'btn-close'
+            },
             buttons: buttonOptions,
             close: function () {
                 $(this).remove();
@@ -2790,10 +2811,20 @@ AJAX.registerOnload('functions.js', function () {
         var $msgbox = Functions.ajaxShowMessage();
 
         /**
-         * @var button_options  Object containing options to be passed to jQueryUI's dialog
+         * @var buttonOptions Object containing options to be passed to jQueryUI's dialog
          */
-        var buttonOptions = {};
-        buttonOptions[Messages.strGo] = function () {
+        var buttonOptions = {
+            [Messages.strGo]: {
+                text: Messages.strGo,
+                'class': 'btn btn-primary',
+            },
+            [Messages.strCancel]: {
+                text: Messages.strCancel,
+                'class': 'btn btn-secondary',
+            },
+        };
+
+        buttonOptions[Messages.strGo].click = function () {
             event.preventDefault();
 
             /**
@@ -2830,7 +2861,7 @@ AJAX.registerOnload('functions.js', function () {
             }); // end $.post()
         };
 
-        buttonOptions[Messages.strCancel] = function () {
+        buttonOptions[Messages.strCancel].click = function () {
             $(this).dialog('close');
         };
         $.get($(this).attr('href'), { 'ajax_request': true }, function (data) {
@@ -2845,6 +2876,9 @@ AJAX.registerOnload('functions.js', function () {
 
             $('<div id="change_password_dialog"></div>')
                 .dialog({
+                    classes: {
+                        'ui-dialog-titlebar-close': 'btn-close'
+                    },
                     title: Messages.strChangePassword,
                     width: 600,
                     close: function () {
@@ -2969,13 +3003,19 @@ Functions.autoPopulate = function (inputId, offset) {
     }
     var colDefault = centralColumnList[db + '_' + table][offset].col_default.toUpperCase();
     var $input4 = $('#' + newInputId + '4');
-    if (colDefault !== '' && colDefault !== 'NULL' && colDefault !== 'CURRENT_TIMESTAMP' && colDefault !== 'CURRENT_TIMESTAMP()') {
-        $input4.val('USER_DEFINED');
-        $input4.next().next().show();
-        $input4.next().next().val(centralColumnList[db + '_' + table][offset].col_default);
+    if (colDefault === 'NULL' || colDefault === 'CURRENT_TIMESTAMP' || colDefault === 'CURRENT_TIMESTAMP()') {
+        if (colDefault === 'CURRENT_TIMESTAMP()') {
+            colDefault = 'CURRENT_TIMESTAMP';
+        }
+        $input4.val(colDefault);
+        $input4.siblings('.default_value').hide();
+    } if (colDefault === '') {
+        $input4.val('NONE');
+        $input4.siblings('.default_value').hide();
     } else {
-        $input4.val(centralColumnList[db + '_' + table][offset].col_default);
-        $input4.next().next().hide();
+        $input4.val('USER_DEFINED');
+        $input4.siblings('.default_value').show();
+        $input4.siblings('.default_value').val(centralColumnList[db + '_' + table][offset].col_default);
     }
     $('#' + newInputId + '5').val(centralColumnList[db + '_' + table][offset].col_collation);
     var $input6 = $('#' + newInputId + '6');
@@ -3219,6 +3259,9 @@ AJAX.registerOnload('functions.js', function () {
         }
         var buttonOptions = {};
         var $centralColumnsDialog = $(centralColumnsDialog).dialog({
+            classes: {
+                'ui-dialog-titlebar-close': 'btn-close'
+            },
             minWidth: width,
             maxHeight: 450,
             modal: true,
@@ -3376,10 +3419,41 @@ AJAX.registerOnload('functions.js', function () {
 Functions.indexDialogModal = function (routeUrl, url, title, callbackSuccess, callbackFailure) {
     /* Remove the hidden dialogs if there are*/
     var modal = $('#indexDialogModal');
-    /**
-     * @var button_options Object that stores the options
-     *                     passed to jQueryUI dialog
-     */
+
+    const indexDialogPreviewModal = document.getElementById('indexDialogPreviewModal');
+    indexDialogPreviewModal.addEventListener('shown.bs.modal', () => {
+        const modalBody = indexDialogPreviewModal.querySelector('.modal-body');
+        const $form = $('#index_frm');
+        const formUrl = $form.attr('action');
+        const sep = CommonParams.get('arg_separator');
+        const formData = $form.serialize() +
+            sep + 'do_save_data=1' +
+            sep + 'preview_sql=1' +
+            sep + 'ajax_request=1';
+        $.post({
+            url: formUrl,
+            data: formData,
+            success: response => {
+                if (! response.success) {
+                    modalBody.innerHTML = '<div class="alert alert-danger" role="alert">' + Messages.strErrorProcessingRequest + '</div>';
+                    return;
+                }
+
+                modalBody.innerHTML = response.sql_data;
+                Functions.highlightSql($('#indexDialogPreviewModal'));
+            },
+            error: () => {
+                modalBody.innerHTML = '<div class="alert alert-danger" role="alert">' + Messages.strErrorProcessingRequest + '</div>';
+            }
+        });
+    });
+    indexDialogPreviewModal.addEventListener('hidden.bs.modal', () => {
+        indexDialogPreviewModal.querySelector('.modal-body').innerHTML = '<div class="spinner-border" role="status">' +
+            '<span class="visually-hidden">' + Messages.strLoading + '</span></div>';
+    });
+
+    // Remove previous click listeners from other modal openings (issue: #17892)
+    $('#indexDialogModalGoButton').off('click');
     $('#indexDialogModalGoButton').on('click', function () {
         /**
          * @var the_form object referring to the export form
@@ -3405,7 +3479,7 @@ Functions.indexDialogModal = function (routeUrl, url, title, callbackSuccess, ca
                     .insertAfter('#index_header');
                 var $editIndexDialog = $('#indexDialogModal');
                 if ($editIndexDialog.length > 0) {
-                    $editIndexDialog.dialog('close');
+                    $editIndexDialog.modal('hide');
                 }
                 $('div.no_indexes_defined').hide();
                 if (callbackSuccess) {
@@ -3427,11 +3501,7 @@ Functions.indexDialogModal = function (routeUrl, url, title, callbackSuccess, ca
             }
         }); // end $.post()
     });
-    $('#indexDialogModalPreviewButton').on('click', function () {
-        // Function for Previewing SQL
-        var $form = $('#index_frm');
-        Functions.previewSql($form);
-    });
+
     var $msgbox = Functions.ajaxShowMessage();
     $.post(routeUrl, url, function (data) {
         if (typeof data !== 'undefined' && data.success === false) {
@@ -3462,13 +3532,27 @@ Functions.showIndexEditDialog = function ($outer) {
     Indexes.checkIndexType();
     Functions.checkIndexName('index_frm');
     var $indexColumns = $('#index_columns');
-    $indexColumns.find('td').each(function () {
-        $(this).css('width', $(this).width() + 'px');
-    });
     $indexColumns.find('tbody').sortable({
         axis: 'y',
         containment: $indexColumns.find('tbody'),
-        tolerance: 'pointer'
+        tolerance: 'pointer',
+        forcePlaceholderSize: true,
+        // Add custom dragged row
+        helper: function (event, tr) {
+            var $originalCells = tr.children();
+            var $helper = tr.clone();
+            $helper.children().each(function (index) {
+                // Set cell width in dragged row
+                $(this).width($originalCells.eq(index).outerWidth());
+                var $childrenSelect = $originalCells.eq(index).children('select');
+                if ($childrenSelect.length) {
+                    var selectedIndex = $childrenSelect.prop('selectedIndex');
+                    // Set correct select value in dragged row
+                    $(this).children('select').prop('selectedIndex', selectedIndex);
+                }
+            });
+            return $helper;
+        }
     });
     Functions.showHints($outer);
     // Add a slider for selecting how many columns to add to the index
@@ -3736,14 +3820,22 @@ AJAX.registerOnload('functions.js', function () {
 
     // Sync favorite tables from localStorage to pmadb.
     if ($('#sync_favorite_tables').length) {
+        var favoriteTables = '';
+        if (isStorageSupported('localStorage')
+            && typeof window.localStorage.favoriteTables !== 'undefined'
+            && window.localStorage.favoriteTables !== 'undefined') {
+            favoriteTables = window.localStorage.favoriteTables;
+            if (favoriteTables === 'undefined') {
+                // Do not send an invalid value
+                return;
+            }
+        }
         $.ajax({
             url: $('#sync_favorite_tables').attr('href'),
             cache: false,
             type: 'POST',
             data: {
-                'favoriteTables': (isStorageSupported('localStorage') && typeof window.localStorage.favoriteTables !== 'undefined')
-                    ? window.localStorage.favoriteTables
-                    : '',
+                'favoriteTables': favoriteTables,
                 'server': CommonParams.get('server'),
                 'no_debug': true
             },
@@ -3929,6 +4021,22 @@ Functions.getCellValue = function (td) {
 };
 
 /**
+ * Validate and return stringified JSON inputs, or plain if invalid.
+ *
+ * @param json the json input to be validated and stringified
+ * @param replacer An array of strings and numbers that acts as an approved list for selecting the object properties that will be stringified.
+ * @param space Adds indentation, white space, and line break characters to the return-value JSON text to make it easier to read.
+ * @return {string}
+ */
+Functions.stringifyJSON = function (json, replacer = null, space = 0) {
+    try {
+        return JSON.stringify(JSON.parse(json), replacer, space);
+    } catch (e) {
+        return json;
+    }
+};
+
+/**
  * Unbind all event handlers before tearing down a page
  */
 AJAX.registerTeardown('functions.js', function () {
@@ -4080,9 +4188,14 @@ $(function () {
 
 /**
  * Scrolls the page to the top if clicking the server-breadcrumb bar
+ * If the user holds the Ctrl (or Meta on macOS) key, it prevents the scroll
+ * so they can open the link in a new tab.
  */
 $(function () {
     $(document).on('click', '#server-breadcrumb, #goto_pagetop', function (event) {
+        if (event.ctrlKey || event.metaKey) {
+            return;
+        }
         event.preventDefault();
         $('html, body').animate({ scrollTop: 0 }, 'fast');
     });
@@ -4328,21 +4441,24 @@ Functions.ignorePhpErrors = function (clearPrevErrors) {
  * @param $inputField
  */
 Functions.toggleDatepickerIfInvalid = function ($td, $inputField) {
-    // Regex allowed by the Datetimepicker UI
-    var dtexpDate = new RegExp(['^([0-9]{4})',
-        '-(((01|03|05|07|08|10|12)-((0[1-9])|([1-2][0-9])|(3[0-1])))|((02|04|06|09|11)',
-        '-((0[1-9])|([1-2][0-9])|30)))$'].join(''));
-    var dtexpTime = new RegExp(['^(([0-1][0-9])|(2[0-3]))',
-        ':((0[0-9])|([1-5][0-9]))',
-        ':((0[0-9])|([1-5][0-9]))(.[0-9]{1,6}){0,1}$'].join(''));
+    // If the Datetimepicker UI is not present, return
+    if ($inputField.hasClass('hasDatepicker')) {
+        // Regex allowed by the Datetimepicker UI
+        var dtexpDate = new RegExp(['^([0-9]{4})',
+            '-(((01|03|05|07|08|10|12)-((0[1-9])|([1-2][0-9])|(3[0-1])))|((02|04|06|09|11)',
+            '-((0[1-9])|([1-2][0-9])|30)))$'].join(''));
+        var dtexpTime = new RegExp(['^(([0-1][0-9])|(2[0-3]))',
+            ':((0[0-9])|([1-5][0-9]))',
+            ':((0[0-9])|([1-5][0-9]))(.[0-9]{1,6}){0,1}$'].join(''));
 
-    // If key-ed in Time or Date values are unsupported by the UI, close it
-    if ($td.attr('data-type') === 'date' && ! dtexpDate.test($inputField.val())) {
-        $inputField.datepicker('hide');
-    } else if ($td.attr('data-type') === 'time' && ! dtexpTime.test($inputField.val())) {
-        $inputField.datepicker('hide');
-    } else {
-        $inputField.datepicker('show');
+        // If key-ed in Time or Date values are unsupported by the UI, close it
+        if ($td.attr('data-type') === 'date' && ! dtexpDate.test($inputField.val())) {
+            $inputField.datepicker('hide');
+        } else if ($td.attr('data-type') === 'time' && ! dtexpTime.test($inputField.val())) {
+            $inputField.datepicker('hide');
+        } else {
+            $inputField.datepicker('show');
+        }
     }
 };
 
@@ -4508,8 +4624,10 @@ Functions.getImage = function (image, alternate, attributes) {
  * @param {object}     value       Configuration value.
  */
 Functions.configSet = function (key, value) {
+    // Updating value in local storage.
     var serialized = JSON.stringify(value);
     localStorage.setItem(key, serialized);
+
     $.ajax({
         url: 'index.php?route=/config/set',
         type: 'POST',
@@ -4521,15 +4639,12 @@ Functions.configSet = function (key, value) {
             value: serialized,
         },
         success: function (data) {
-            // Updating value in local storage.
-            if (! data.success) {
-                if (data.error) {
-                    Functions.ajaxShowMessage(data.error);
-                } else {
-                    Functions.ajaxShowMessage(data.message);
+            if (data.success !== true) {
+                // Try to find a message to display
+                if (data.error || data.message || false) {
+                    Functions.ajaxShowMessage(data.error || data.message);
                 }
             }
-            // Eventually, call callback.
         }
     });
 };
@@ -4544,11 +4659,12 @@ Functions.configSet = function (key, value) {
  *
  * @param {string}     key             Configuration key.
  * @param {boolean}    cached          Configuration type.
- * @param {Function}   successCallback The callback to call after the value is received
+ * @param {Function}   successCallback The callback to call after the value is successfully received
+ * @param {Function}   failureCallback The callback to call when the value can not be received
  *
  * @return {void}
  */
-Functions.configGet = function (key, cached, successCallback) {
+Functions.configGet = function (key, cached, successCallback, failureCallback) {
     var isCached = (typeof cached !== 'undefined') ? cached : true;
     var value = localStorage.getItem(key);
     if (isCached && value !== undefined && value !== null) {
@@ -4567,12 +4683,23 @@ Functions.configGet = function (key, cached, successCallback) {
             key: key
         },
         success: function (data) {
-            // Updating value in local storage.
-            if (data.success) {
-                localStorage.setItem(key, JSON.stringify(data.value));
-            } else {
-                Functions.ajaxShowMessage(data.message);
+            if (data.success !== true) {
+                // Try to find a message to display
+                if (data.error || data.message || false) {
+                    Functions.ajaxShowMessage(data.error || data.message);
+                }
+
+                // Call the callback if it is defined
+                if (typeof failureCallback === 'function') {
+                    failureCallback();
+                }
+
+                // return here, exit non success mode
+                return;
             }
+
+            // Updating value in local storage.
+            localStorage.setItem(key, JSON.stringify(data.value));
             // Call the callback if it is defined
             if (typeof successCallback === 'function') {
                 // Feed it the value previously saved like on async mode

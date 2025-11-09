@@ -53,10 +53,11 @@ class GisMultiLineString extends GisGeometry
      * @param string $spatial spatial data of a row
      *
      * @return array an array containing the min, max values for x and y coordinates
+     * @psalm-return array{minX:float,minY:float,maxX:float,maxY:float}
      */
     public function scaleRow($spatial)
     {
-        $min_max = [];
+        $min_max = GisGeometry::EMPTY_EXTENT;
 
         // Trim to remove leading 'MULTILINESTRING((' and trailing '))'
         $multilinestirng = mb_substr($spatial, 17, -2);
@@ -183,8 +184,8 @@ class GisMultiLineString extends GisGeometry
             unset($temp_point);
             // print label
             if ($label !== '' && $first_line) {
-                $pdf->SetXY($points_arr[1][0], $points_arr[1][1]);
-                $pdf->SetFontSize(5);
+                $pdf->setXY($points_arr[1][0], $points_arr[1][1]);
+                $pdf->setFontSize(5);
                 $pdf->Cell(0, 0, $label);
             }
 
@@ -207,7 +208,7 @@ class GisMultiLineString extends GisGeometry
     public function prepareRowAsSvg($spatial, $label, $line_color, array $scale_data)
     {
         $line_options = [
-            'name' => $label,
+            'data-label' => $label,
             'class' => 'linestring vector',
             'fill' => 'none',
             'stroke' => $line_color,
@@ -297,7 +298,7 @@ class GisMultiLineString extends GisGeometry
      */
     public function generateWkt(array $gis_data, $index, $empty = '')
     {
-        $data_row = $gis_data[$index]['MULTILINESTRING'];
+        $data_row = $gis_data[$index]['MULTILINESTRING'] ?? null;
 
         $no_of_lines = $data_row['no_of_lines'] ?? 1;
         if ($no_of_lines < 1) {

@@ -11,13 +11,11 @@ use FastRoute\RouteCollector;
 use FastRoute\RouteParser\Std as RouteParserStd;
 use PhpMyAdmin\Http\ServerRequest;
 use Psr\Container\ContainerInterface;
-use RuntimeException;
 
 use function __;
 use function file_exists;
 use function file_put_contents;
 use function htmlspecialchars;
-use function is_array;
 use function is_readable;
 use function is_string;
 use function is_writable;
@@ -28,6 +26,7 @@ use function var_export;
 
 use const CACHE_DIR;
 use const E_USER_WARNING;
+use const ROOT_PATH;
 
 /**
  * Class used to warm up the routing cache and manage routing.
@@ -72,12 +71,14 @@ class Routing
 
         // If skip cache is enabled, do not try to read the file
         // If no cache skipping then read it and use it
-        if (! $skipCache && file_exists(self::ROUTES_CACHE_FILE)) {
-            /** @psalm-suppress MissingFile, UnresolvableInclude */
+        if (
+            ! $skipCache
+            && file_exists(self::ROUTES_CACHE_FILE)
+            && isset($_SESSION['isRoutesCacheFileValid'])
+            && $_SESSION['isRoutesCacheFileValid']
+        ) {
+            /** @psalm-suppress MissingFile, UnresolvableInclude, MixedAssignment */
             $dispatchData = require self::ROUTES_CACHE_FILE;
-            if (! is_array($dispatchData)) {
-                throw new RuntimeException('Invalid cache file "' . self::ROUTES_CACHE_FILE . '"');
-            }
 
             return new DispatcherGroupCountBased($dispatchData);
         }
@@ -94,10 +95,14 @@ class Routing
         // If skip cache is enabled, do not try to write it
         // If no skip cache then try to write if write is possible
         if (! $skipCache && $canWriteCache) {
-            $writeWorks = self::writeCache(
-                '<?php return ' . var_export($dispatchData, true) . ';'
-            );
-            if (! $writeWorks) {
+            /** @psalm-suppress MissingFile, UnresolvableInclude, MixedAssignment */
+            $cachedDispatchData = file_exists(self::ROUTES_CACHE_FILE) ? require self::ROUTES_CACHE_FILE : [];
+            $_SESSION['isRoutesCacheFileValid'] = $dispatchData === $cachedDispatchData;
+            if (
+                ! $_SESSION['isRoutesCacheFileValid']
+                && ! self::writeCache(sprintf('<?php return %s;', var_export($dispatchData, true)))
+            ) {
+                $_SESSION['isRoutesCacheFileValid'] = false;
                 trigger_error(
                     sprintf(
                         __(

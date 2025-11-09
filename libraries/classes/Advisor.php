@@ -254,7 +254,7 @@ class Advisor
 
             if (isset($rule['precondition'])) {
                 try {
-                     $precondition = $this->evaluateRuleExpression($rule['precondition']);
+                    $precondition = $this->evaluateRuleExpression($rule['precondition']);
                 } catch (Throwable $e) {
                     $this->storeError(
                         sprintf(
@@ -396,7 +396,22 @@ class Advisor
      */
     private function evaluateRuleExpression(string $expression)
     {
-        return $this->expression->evaluate($expression, array_merge($this->variables, $this->globals));
+        $variables = array_merge($this->variables, $this->globals);
+
+        // Set default values for missing InnoDB variables when InnoDB is disabled
+        if (! isset($variables['innodb_buffer_pool_size'])) {
+            $variables['innodb_buffer_pool_size'] = 0;
+        }
+
+        if (! isset($variables['innodb_log_file_size'])) {
+            $variables['innodb_log_file_size'] = 0;
+        }
+
+        if (! isset($variables['innodb_log_files_in_group'])) {
+            $variables['innodb_log_files_in_group'] = 0;
+        }
+
+        return $this->expression->evaluate($expression, $variables);
     }
 
     /**

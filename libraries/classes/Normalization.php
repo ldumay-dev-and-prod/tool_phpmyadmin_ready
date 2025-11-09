@@ -201,7 +201,7 @@ class Normalization
             'max_rows' => intval($GLOBALS['cfg']['MaxRows']),
             'char_editing' => $GLOBALS['cfg']['CharEditing'],
             'attribute_types' => $this->dbi->types->getAttributes(),
-            'privs_available' => $GLOBALS['col_priv'] && $GLOBALS['is_reload_priv'],
+            'privs_available' => ($GLOBALS['col_priv'] ?? false) && ($GLOBALS['is_reload_priv'] ?? false),
             'max_length' => $this->dbi->getVersion() >= 50503 ? 1024 : 255,
             'charsets' => $charsetsList,
         ]);
@@ -656,18 +656,18 @@ class Normalization
                 }
 
                 $columnList[] = $tmpTableCols;
-                    $html .= '<p><input type="text" name="'
-                        . htmlspecialchars($tableName)
-                        . '" value="' . htmlspecialchars($tableName) . '">'
-                        . '( <u>' . htmlspecialchars($key) . '</u>'
-                        . (count($dependents) > 0 ? ', ' : '')
-                        . htmlspecialchars(implode(', ', $dependents)) . ' )';
-                    $newTables[$table][$tableName] = [
-                        'pk' => $key,
-                        'nonpk' => implode(', ', $dependents),
-                    ];
-                    $i++;
-                    $tableName = 'table' . $i;
+                $html .= '<p><input type="text" name="'
+                    . htmlspecialchars($tableName)
+                    . '" value="' . htmlspecialchars($tableName) . '">'
+                    . '( <u>' . htmlspecialchars($key) . '</u>'
+                    . (count($dependents) > 0 ? ', ' : '')
+                    . htmlspecialchars(implode(', ', $dependents)) . ' )';
+                $newTables[$table][$tableName] = [
+                    'pk' => $key,
+                    'nonpk' => implode(', ', $dependents),
+                ];
+                $i++;
+                $tableName = 'table' . $i;
             }
         }
 

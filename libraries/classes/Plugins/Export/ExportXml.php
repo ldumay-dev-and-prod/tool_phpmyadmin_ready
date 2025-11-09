@@ -275,6 +275,11 @@ class ExportXml extends ExportPlugin
                     . Util::backquote($table),
                     0
                 );
+
+                if ($result === []) {
+                    continue;
+                }
+
                 $tbl = (string) $result[$table][1];
 
                 $is_view = $dbi->getTable($db, $table)
@@ -543,7 +548,7 @@ class ExportXml extends ExportPlugin
         $this->tables = $tables;
     }
 
-    public function isAvailable(): bool
+    public static function isAvailable(): bool
     {
         global $db;
 

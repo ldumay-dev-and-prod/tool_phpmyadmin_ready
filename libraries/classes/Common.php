@@ -39,11 +39,14 @@ use function mb_strrpos;
 use function mb_substr;
 use function register_shutdown_function;
 use function session_id;
+use function str_replace;
 use function strlen;
 use function trigger_error;
 use function urldecode;
 
 use const E_USER_ERROR;
+use const E_USER_WARNING;
+use const PHP_VERSION_ID;
 
 final class Common
 {
@@ -312,6 +315,13 @@ final class Common
         }
 
         /**
+         * Warning about mysqlnd. This does not apply to PMA >= 6.0
+         */
+        if (! function_exists('mysqli_stmt_get_result')) {
+            Core::warnMissingExtension('mysqlnd');
+        }
+
+        /**
          * We really need this one!
          */
         if (! function_exists('preg_replace')) {
@@ -489,7 +499,7 @@ final class Common
                 __(
                     'Failed to set session cookie. Maybe you are using HTTP instead of HTTPS to access phpMyAdmin.'
                 ),
-                E_USER_ERROR
+                PHP_VERSION_ID < 80400 ? E_USER_ERROR : E_USER_WARNING
             );
         }
 
@@ -526,8 +536,10 @@ final class Common
 
         $urlParams['db'] = $db;
         $urlParams['table'] = $table;
-        $containerBuilder->setParameter('db', $db);
-        $containerBuilder->setParameter('table', $table);
+        // If some parameter value includes the % character, you need to escape it by adding
+        // another % so Symfony doesn't consider it a reference to a parameter name.
+        $containerBuilder->setParameter('db', str_replace('%', '%%', $db));
+        $containerBuilder->setParameter('table', str_replace('%', '%%', $table));
         $containerBuilder->setParameter('url_params', $urlParams);
     }
 

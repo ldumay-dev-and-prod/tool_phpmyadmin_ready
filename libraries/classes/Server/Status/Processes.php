@@ -9,9 +9,11 @@ use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\Util;
 
 use function __;
+use function array_key_exists;
 use function array_keys;
 use function count;
 use function mb_strtolower;
+use function number_format;
 use function strlen;
 use function ucfirst;
 
@@ -28,7 +30,7 @@ final class Processes
     /**
      * @param array $params Request parameters
      *
-     * @return array<string, array|string>
+     * @return array<string, array|string|bool>
      */
     public function getList(array $params): array
     {
@@ -44,11 +46,9 @@ final class Processes
         $sqlQuery = $showFullSql
             ? 'SHOW FULL PROCESSLIST'
             : 'SHOW PROCESSLIST';
-        if (
-            (! empty($params['order_by_field'])
-                && ! empty($params['sort_order']))
-            || ! empty($params['showExecuting'])
-        ) {
+        $useIS = ! empty($params['showExecuting']) ||
+            (! empty($params['order_by_field']) && ! empty($params['sort_order']));
+        if ($useIS) {
             $urlParams['order_by_field'] = $params['order_by_field'];
             $urlParams['sort_order'] = $params['sort_order'];
             $urlParams['showExecuting'] = $params['showExecuting'];
@@ -70,18 +70,22 @@ final class Processes
         while ($process = $result->fetchAssoc()) {
             // Array keys need to modify due to the way it has used
             // to display column values
-            if (
-                (! empty($params['order_by_field']) && ! empty($params['sort_order']))
-                || ! empty($params['showExecuting'])
-            ) {
-                foreach (array_keys($process) as $key) {
-                    $newKey = ucfirst(mb_strtolower($key));
-                    if ($newKey === $key) {
-                        continue;
-                    }
+            foreach (array_keys($process) as $key) {
+                $newKey = ucfirst(mb_strtolower($key));
+                if ($newKey === $key) {
+                    continue;
+                }
 
-                    $process[$newKey] = $process[$key];
-                    unset($process[$key]);
+                $process[$newKey] = $process[$key];
+                unset($process[$key]);
+            }
+
+            $progress = ! empty($process['Progress']) ? $process['Progress'] : '---';
+            if ($useIS && ! empty($process['Progress'])) {
+                $stage = array_key_exists('Stage', $process) ? (int) $process['Stage'] : null;
+                $maxStage = array_key_exists('Max_stage', $process) ? (int) $process['Max_stage'] : null;
+                if ($stage !== null && $maxStage !== null && $maxStage > 1) {
+                    $progress = number_format(($stage - 1) / $maxStage * 100 + ((float) $progress) / $maxStage, 3);
                 }
             }
 
@@ -89,11 +93,11 @@ final class Processes
                 'id' => $process['Id'],
                 'user' => $process['User'],
                 'host' => $process['Host'],
-                'db' => ! isset($process['db']) || strlen($process['db']) === 0 ? '' : $process['db'],
+                'db' => ! isset($process['Db']) || strlen($process['Db']) === 0 ? '' : $process['Db'],
                 'command' => $process['Command'],
                 'time' => $process['Time'],
                 'state' => ! empty($process['State']) ? $process['State'] : '---',
-                'progress' => ! empty($process['Progress']) ? $process['Progress'] : '---',
+                'progress' => $progress,
                 'info' => ! empty($process['Info']) ? Generator::formatSql($process['Info'], ! $showFullSql) : '---',
             ];
         }
@@ -102,6 +106,7 @@ final class Processes
             'columns' => $this->getSortableColumnsForProcessList($showFullSql, $params),
             'rows' => $rows,
             'refresh_params' => $urlParams,
+            'is_mariadb' => $this->dbi->isMariaDB(),
         ];
     }
 
@@ -124,7 +129,7 @@ final class Processes
             ],
             [
                 'column_name' => __('Database'),
-                'order_by_field' => 'db',
+                'order_by_field' => 'Db',
             ],
             [
                 'column_name' => __('Command'),
@@ -138,14 +143,18 @@ final class Processes
                 'column_name' => __('Status'),
                 'order_by_field' => 'State',
             ],
-            [
+        ];
+
+        if ($this->dbi->isMariaDB()) {
+            $sortableColumns[] = [
                 'column_name' => __('Progress'),
                 'order_by_field' => 'Progress',
-            ],
-            [
-                'column_name' => __('SQL query'),
-                'order_by_field' => 'Info',
-            ],
+            ];
+        }
+
+        $sortableColumns[] = [
+            'column_name' => __('SQL query'),
+            'order_by_field' => 'Info',
         ];
 
         $sortableColCount = count($sortableColumns);

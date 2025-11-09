@@ -147,10 +147,6 @@ class AuthenticationCookie extends AuthenticationPlugin
         }
 
         $_form_params = [];
-        if (isset($route)) {
-            $_form_params['route'] = $route;
-        }
-
         if (strlen($GLOBALS['db'])) {
             $_form_params['db'] = $GLOBALS['db'];
         }
@@ -256,7 +252,7 @@ class AuthenticationCookie extends AuthenticationPlugin
 
                 $captchaSiteVerifyURL = $GLOBALS['cfg']['CaptchaSiteVerifyURL'] ?? '';
                 $captchaSiteVerifyURL = empty($captchaSiteVerifyURL) ? null : $captchaSiteVerifyURL;
-                if (function_exists('curl_init')) {
+                if (function_exists('curl_init') && function_exists('curl_exec')) {
                     $reCaptcha = new ReCaptcha\ReCaptcha(
                         $GLOBALS['cfg']['CaptchaLoginPrivateKey'],
                         new ReCaptcha\RequestMethod\CurlPost(null, $captchaSiteVerifyURL)
@@ -297,9 +293,9 @@ class AuthenticationCookie extends AuthenticationPlugin
             $this->user = Core::sanitizeMySQLUser($_POST['pma_username']);
 
             $password = $_POST['pma_password'] ?? '';
-            if (strlen($password) >= 1000) {
+            if (strlen($password) >= 2000) {
                 $conn_error = __('Your password is too long. To prevent denial-of-service attacks, ' .
-                    'phpMyAdmin restricts passwords to less than 1000 characters.');
+                    'phpMyAdmin restricts passwords to less than 2000 characters.');
 
                 return false;
             }
@@ -455,8 +451,6 @@ class AuthenticationCookie extends AuthenticationPlugin
      */
     public function rememberCredentials(): void
     {
-        global $route;
-
         // Name and password cookies need to be refreshed each time
         // Duration = one month for username
         $this->storeUsernameCookie($this->user);
@@ -470,10 +464,6 @@ class AuthenticationCookie extends AuthenticationPlugin
 
         // any parameters to pass?
         $url_params = [];
-        if (isset($route)) {
-            $url_params['route'] = $route;
-        }
-
         if (strlen($GLOBALS['db']) > 0) {
             $url_params['db'] = $GLOBALS['db'];
         }
@@ -597,9 +587,19 @@ class AuthenticationCookie extends AuthenticationPlugin
      */
     private function getEncryptionSecret(): string
     {
+        /** @var mixed $key */
         $key = $GLOBALS['cfg']['blowfish_secret'] ?? null;
-        if (is_string($key) && mb_strlen($key, '8bit') === SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
+        if (! is_string($key)) {
+            return $this->getSessionEncryptionSecret();
+        }
+
+        $length = mb_strlen($key, '8bit');
+        if ($length === SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
             return $key;
+        }
+
+        if ($length > SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
+            return mb_substr($key, 0, SODIUM_CRYPTO_SECRETBOX_KEYBYTES, '8bit');
         }
 
         return $this->getSessionEncryptionSecret();
@@ -610,6 +610,7 @@ class AuthenticationCookie extends AuthenticationPlugin
      */
     private function getSessionEncryptionSecret(): string
     {
+        /** @var mixed $key */
         $key = $_SESSION['encryption_key'] ?? null;
         if (is_string($key) && mb_strlen($key, '8bit') === SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
             return $key;

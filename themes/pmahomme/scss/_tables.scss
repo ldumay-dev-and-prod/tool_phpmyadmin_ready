@@ -1,12 +1,18 @@
 .table {
+  caption-side: top;
+
   th,
   td {
     text-shadow: 0 1px 0 #fff;
     vertical-align: middle;
+
+    > span:empty::before {
+      content: "\200b";
+    }
   }
 
   th {
-    text-align: left;
+    color: $th-color;
   }
 
   td {
@@ -17,6 +23,12 @@
     border-right: 1px solid #fff;
     background-image: linear-gradient(#fff, #ccc);
   }
+
+  caption {
+    background-color: $th-background;
+    font-weight: bold;
+    text-align: center;
+  }
 }
 
 .table-hover {
@@ -24,6 +36,12 @@
     &:hover {
       background: linear-gradient(#ced6df, #b6c6d7);
     }
+  }
+}
+
+.table-striped {
+  > tbody > tr:nth-of-type(#{$table-striped-order}) > th {
+    color: $th-color;
   }
 }
 

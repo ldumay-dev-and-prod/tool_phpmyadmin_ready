@@ -20,17 +20,33 @@ $cfg['blowfish_secret'] = ']fsTicMkQ.UuY1-8exM9Hded8}iw=C:H';
 $i = 0;
 
 /**
- * First server
+ * auth_type:
+ * - config: auto connexion
+ * - cookie: session
  */
+
+/* Serveur #1 : local */
 $i++;
-/* Authentication type */
-$cfg['Servers'][$i]['auth_type'] = 'config';
-/* Server parameters */
-$cfg['Servers'][$i]['host'] = 'localhost';
+$serverName = 'localhost';
+$cfg['Servers'][$i]['host'] = $serverName;
+$cfg['Servers'][$i]['port'] = '3306';
+$cfg['Servers'][$i]['user'] = 'root';
+$cfg['Servers'][$i]['password'] = 'root';
+$cfg['Servers'][$i]['auth_type'] = 'cookie';
 $cfg['Servers'][$i]['compress'] = false;
 $cfg['Servers'][$i]['AllowNoPassword'] = false;
-$cfg['Servers'][$i]['user'] = 'root';
-$cfg['Servers'][$i]['password'] = 'root'; 
+$cfg['Servers'][$i]['verbose'] = 'Serveur ' . $serverName;
+
+/* Serveur #2 : serveur distant */
+$i++;
+$serverName = 'mysql.ldumay.dev';
+$cfg['Servers'][$i]['host'] = $serverName;
+$cfg['Servers'][$i]['port'] = '33078';
+$cfg['Servers'][$i]['user'] = 'ldumay';
+$cfg['Servers'][$i]['auth_type'] = 'cookie';
+$cfg['Servers'][$i]['compress'] = false;
+$cfg['Servers'][$i]['AllowNoPassword'] = false;
+$cfg['Servers'][$i]['verbose'] = 'VPS: ' . $serverName;
 
 /**
  * phpMyAdmin configuration storage settings.
