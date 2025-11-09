@@ -4,9 +4,6 @@ Dépôt d'utilisation de phpmyadmin prêt à l'emploi.
 
 ## 1 - Pré-requis
 
-PHP : **8.1**
-
-
 - Environnement Php :
 	- Composer: 2.8.9
 	- Php: 8.4.7
