@@ -13,6 +13,7 @@ use function intval;
 use function json_decode;
 use function min;
 use function preg_replace;
+use function rtrim;
 use function strlen;
 use function trim;
 
@@ -80,21 +81,20 @@ class CreateAddField
                 continue;
             }
 
-            $definition = $this->getStatementPrefix($isCreateTable) .
-                    Table::generateFieldSpec(
-                        trim($_POST['field_name'][$i]),
-                        $_POST['field_type'][$i],
-                        $_POST['field_length'][$i],
-                        $_POST['field_attribute'][$i],
-                        $_POST['field_collation'][$i] ?? '',
-                        $_POST['field_null'][$i] ?? 'NO',
-                        $_POST['field_default_type'][$i],
-                        $_POST['field_default_value'][$i],
-                        $_POST['field_extra'][$i] ?? false,
-                        $_POST['field_comments'][$i] ?? '',
-                        $_POST['field_virtuality'][$i] ?? '',
-                        $_POST['field_expression'][$i] ?? ''
-                    );
+            $definition = $this->getStatementPrefix($isCreateTable) . Table::generateFieldSpec(
+                rtrim($_POST['field_name'][$i]),
+                $_POST['field_type'][$i],
+                $_POST['field_length'][$i],
+                $_POST['field_attribute'][$i],
+                $_POST['field_collation'][$i] ?? '',
+                $_POST['field_null'][$i] ?? 'NO',
+                $_POST['field_default_type'][$i],
+                $_POST['field_default_value'][$i],
+                $_POST['field_extra'][$i] ?? false,
+                $_POST['field_comments'][$i] ?? '',
+                $_POST['field_virtuality'][$i] ?? '',
+                $_POST['field_expression'][$i] ?? ''
+            );
 
             $definition .= $this->setColumnCreationStatementSuffix($previousField, $isCreateTable);
             $previousField = $i;
@@ -171,7 +171,7 @@ class CreateAddField
 
         $indexFields = [];
         foreach ($index['columns'] as $key => $column) {
-            $indexFields[$key] = Util::backquote($_POST['field_name'][$column['col_index']]);
+            $indexFields[$key] = Util::backquote(rtrim($_POST['field_name'][$column['col_index']]));
             if (! $column['size']) {
                 continue;
             }
@@ -398,8 +398,12 @@ class CreateAddField
             . Util::backquote(trim($table)) . ' (' . $sqlStatement . ')';
 
         // Adds table type, character set, comments and partition definition
-        if (! empty($_POST['tbl_storage_engine']) && ($_POST['tbl_storage_engine'] !== 'Default')) {
-            $sqlQuery .= ' ENGINE = ' . $this->dbi->escapeString($_POST['tbl_storage_engine']);
+        if (
+            ! empty($_POST['tbl_storage_engine'])
+            && ($_POST['tbl_storage_engine'] !== 'Default')
+            && StorageEngine::isValid($_POST['tbl_storage_engine'])
+        ) {
+            $sqlQuery .= ' ENGINE = ' . $_POST['tbl_storage_engine'];
         }
 
         if (! empty($_POST['tbl_collation'])) {

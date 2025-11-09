@@ -466,6 +466,14 @@ var AJAX = {
         if (typeof data === 'undefined' || data === null) {
             return;
         }
+        // Can be a string when an error occurred and only HTML was returned.
+        if (typeof data === 'string') {
+            Functions.ajaxRemoveMessage(AJAX.$msgbox);
+            Functions.ajaxShowMessage($(data).text(), false, 'error');
+            AJAX.active = false;
+            AJAX.xhr = null;
+            return;
+        }
         if (typeof data.success !== 'undefined' && data.success) {
             $('html, body').animate({ scrollTop: 0 }, 'fast');
             Functions.ajaxRemoveMessage(AJAX.$msgbox);
@@ -501,6 +509,7 @@ var AJAX = {
                 // Remove all containers that may have
                 // been added outside of #page_content
                 $('body').children()
+                    .not('div.modal')
                     .not('#pma_navigation')
                     .not('#floating_menubar')
                     .not('#page_nav_icons')
@@ -885,11 +894,16 @@ $(document).on('submit', 'form', AJAX.requestHandler);
  * Gracefully handle fatal server errors
  * (e.g: 500 - Internal server error)
  */
-$(document).on('ajaxError', function (event, request) {
+$(document).on('ajaxError', function (event, request, settings) {
     if (AJAX.debug) {
         // eslint-disable-next-line no-console
         console.log('AJAX error: status=' + request.status + ', text=' + request.statusText);
     }
+
+    if (settings.url.includes('/git-revision')) {
+        return;
+    }
+
     // Don't handle aborted requests
     if (request.status !== 0 || request.statusText !== 'abort') {
         var details = '';

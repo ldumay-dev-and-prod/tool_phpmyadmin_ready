@@ -699,6 +699,8 @@ DesignerMove.addOtherDbTables = function () {
                 DesignerMove.markUnsaved();
             }
         });
+
+        $('#designerModalGoButton').off('click');// Unregister the event for other modals to not call this one
         modal.modal('hide');
     });
     $('#add_table_from').on('change', function () {
@@ -869,6 +871,8 @@ DesignerMove.save3 = function (callback) {
         $('#designerModalGoButton').on('click', function () {
             var $form = $('#save_page');
             $form.trigger('submit');
+
+            $('#designerModalGoButton').off('click');// Unregister the event for other modals to not call this one
             modal.modal('hide');
         });
     }
@@ -902,6 +906,8 @@ DesignerMove.editPages = function () {
                         Functions.ajaxShowMessage(Messages.strSelectPage, 2000);
                         return;
                     }
+
+                    $('#designerModalGoButton').off('click');// Unregister the event for other modals to not call this one
                     modal.modal('hide');
                     DesignerMove.loadPage(selected);
                 });
@@ -970,6 +976,8 @@ DesignerMove.deletePages = function () {
                         }
                     });
                 }
+
+                $('#designerModalGoButton').off('click');// Unregister the event for other modals to not call this one
                 modal.modal('hide');
             });
         }
@@ -1056,6 +1064,7 @@ DesignerMove.saveAs = function () {
                     }
                 }
 
+                $('#designerModalGoButton').off('click');// Unregister the event for other modals to not call this one
                 modal.modal('hide');
             });
             // select current page by default
@@ -1121,6 +1130,7 @@ DesignerMove.exportPages = function () {
             var modal = DesignerMove.displayModal($form, Messages.strExportRelationalSchema, '#designerGoModal');
             $('#designerModalGoButton').on('click', function () {
                 $('#id_export_pages').trigger('submit');
+                $('#designerModalGoButton').off('click');// Unregister the event for other modals to not call this one
                 modal.modal('hide');
             });
         }
@@ -1950,16 +1960,16 @@ DesignerMove.addObject = function (dbName, tableName, colName, dbTableNameUrl) {
 };
 
 DesignerMove.enablePageContentEvents = function () {
-    $('#page_content').off('mousedown');
-    $('#page_content').off('mouseup');
-    $('#page_content').off('mousemove');
-    $('#page_content').on('mousedown', function (e) {
+    $(document).off('mousedown');
+    $(document).off('mouseup');
+    $(document).off('mousemove');
+    $(document).on('mousedown', function (e) {
         DesignerMove.mouseDown(e);
     });
-    $('#page_content').on('mouseup', function (e) {
+    $(document).on('mouseup', function (e) {
         DesignerMove.mouseUp(e);
     });
-    $('#page_content').on('mousemove', function (e) {
+    $(document).on('mousemove', function (e) {
         DesignerMove.mouseMove(e);
     });
 };
@@ -2058,9 +2068,9 @@ AJAX.registerTeardown('designer/move.js', function () {
     $('#cancel_close_option').off('click');
     $('#ok_new_rel_panel').off('click');
     $('#cancel_new_rel_panel').off('click');
-    $('#page_content').off('mouseup');
-    $('#page_content').off('mousedown');
-    $('#page_content').off('mousemove');
+    $(document).off('mouseup');
+    $(document).off('mousedown');
+    $(document).off('mousemove');
 });
 
 AJAX.registerOnload('designer/move.js', function () {

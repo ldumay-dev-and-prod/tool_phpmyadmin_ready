@@ -3,10 +3,18 @@ $textarea-rows: 15;
 
 .CodeMirror {
   height: 20rem;
-  direction: ltr;
   border: $card-border-width solid $card-border-color;
 
   @include border-radius($card-border-radius);
+}
+
+// Code mirror default style (do not affect the console style)
+.CodeMirror.cm-s-default {
+  // @see: issue #17705
+  div.CodeMirror-scroll {
+    margin-right: 0;
+    padding-bottom: 0;
+  }
 }
 
 #inline_editor_outer .CodeMirror {
@@ -87,7 +95,7 @@ span {
 }
 
 .CodeMirror-lint-tooltip {
-  z-index: 200;
+  z-index: 2000;
   font-family: inherit;
 
   code {

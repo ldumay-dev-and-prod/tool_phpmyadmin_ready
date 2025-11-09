@@ -47,10 +47,15 @@ Sql.urlEncode = function (str) {
 Sql.autoSave = function (query) {
     if (query) {
         var key = Sql.getAutoSavedKey();
-        if (isStorageSupported('localStorage')) {
-            window.localStorage.setItem(key, query);
-        } else {
-            Cookies.set(key, query);
+        try {
+            if (isStorageSupported('localStorage')) {
+                window.localStorage.setItem(key, query);
+            } else {
+                Cookies.set(key, query);
+            }
+        } catch (e) {
+            console.error(e);
+            Functions.ajaxShowMessage(e.message, false, 'error');
         }
     }
 };
@@ -189,7 +194,7 @@ AJAX.registerTeardown('sql.js', function () {
     $(document).off('click', 'a.delete_row.ajax');
     $(document).off('submit', '.bookmarkQueryForm');
     $('input#bkm_label').off('input');
-    $(document).off('makegrid', '.sqlqueryresults');
+    $(document).off('makeGrid', '.sqlqueryresults');
     $('#togglequerybox').off('click');
     $(document).off('click', '#button_submit_query');
     $(document).off('change', '#id_bookmark');
@@ -377,6 +382,9 @@ AJAX.registerOnload('sql.js', function () {
 
         textArea.value += '\n';
         $('.table_results tbody tr').each(function () {
+            if ($(this).hasClass('repeating_header_row')) {
+                return;
+            }
             $(this).find('.data span').each(function () {
                 // Extract <em> tag for NULL values before converting to string to not mess up formatting
                 var data = $(this).find('em').length !== 0 ? $(this).find('em')[0] : this;
@@ -401,13 +409,15 @@ AJAX.registerOnload('sql.js', function () {
     }); // end of Copy to Clipboard action
 
     /**
-     * Attach the {@link makegrid} function to a custom event, which will be
+     * Attach the {@link makeGrid} function to a custom event, which will be
      * triggered manually everytime the table of results is reloaded
      * @memberOf    jQuery
      */
-    $(document).on('makegrid', '.sqlqueryresults', function () {
+    $(document).on('makeGrid', '.sqlqueryresults', function () {
         $('.table_results').each(function () {
-            makeGrid(this);
+            if (typeof window.makeGrid === 'function') {
+                makeGrid(this);
+            }
         });
     });
 
@@ -625,7 +635,7 @@ AJAX.registerOnload('sql.js', function () {
                     });
                 }
 
-                $('.sqlqueryresults').trigger('makegrid');
+                $('.sqlqueryresults').trigger('makeGrid');
                 $('#togglequerybox').show();
 
                 if (typeof data.action_bookmark === 'undefined') {
@@ -663,7 +673,7 @@ AJAX.registerOnload('sql.js', function () {
             var $sqlqueryresults = $form.parents('.sqlqueryresults');
             $sqlqueryresults
                 .html(data.message)
-                .trigger('makegrid');
+                .trigger('makeGrid');
             Functions.highlightSql($sqlqueryresults);
         }); // end $.post()
     }); // end displayOptionsForm handler
@@ -674,10 +684,11 @@ AJAX.registerOnload('sql.js', function () {
         var $targetTable = $('.table_results[data-uniqueId=\'' + uniqueId + '\']');
         var $headerCells = $targetTable.find('th[data-column]');
         var targetColumns = [];
-        // To handle colspan=4, in case of edit,copy etc options.
-        var dummyTh = ($('.edit_row_anchor').length !== 0 ?
-            '<th class="hide dummy_th"></th><th class="hide dummy_th"></th><th class="hide dummy_th"></th>'
-            : '');
+
+        // To handle colspan=4, in case of edit, copy, etc options (Table row links). Add 3 dummy <TH> elements - only when the Table row links are NOT on the "Right"
+        var rowLinksLocation = ($targetTable.find('thead > tr > th')).first();
+        var dummyTh = (rowLinksLocation[0].getAttribute('colspan') !== null) ? '<th class="hide dummy_th"></th><th class="hide dummy_th"></th><th class="hide dummy_th"></th>' : ''; // Selecting columns that will be considered for filtering and searching.
+
         // Selecting columns that will be considered for filtering and searching.
         $headerCells.each(function () {
             targetColumns.push($(this).text().trim());
@@ -760,7 +771,7 @@ AJAX.registerOnload('sql.js', function () {
                         for (var i = 0; i < len; i++) {
                             dialogContent += '<strong>' + Messages.strSQLQuery +
                                 '</strong>' + response.sql_data[i].sql_query +
-                                Messages.strMatchedRows +
+                                Messages.strAffectedRows +
                                 ' <a href="' + response.sql_data[i].matched_rows_url +
                                 '">' + response.sql_data[i].matched_rows + '</a><br>';
                             if (i < len - 1) {
@@ -899,6 +910,9 @@ Sql.browseForeignDialog = function ($thisA) {
     $.post($thisA.attr('href'), params, function (data) {
         // Creates browse foreign value dialog
         $dialog = $('<div>').append(data.message).dialog({
+            classes: {
+                'ui-dialog-titlebar-close': 'btn-close'
+            },
             title: Messages.strBrowseForeignValues,
             width: Math.min($(window).width() - 100, 700),
             maxHeight: $(window).height() - 100,
@@ -1010,7 +1024,7 @@ AJAX.registerOnload('sql.js', function () {
     /**
      * create resizable table
      */
-    $('.sqlqueryresults').trigger('makegrid');
+    $('.sqlqueryresults').trigger('makeGrid');
 
     /**
      * Check if there is any saved query

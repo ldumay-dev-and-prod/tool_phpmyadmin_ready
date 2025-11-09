@@ -7,6 +7,7 @@ namespace PhpMyAdmin;
 use PhpMyAdmin\Dbal\ResultInterface;
 use PhpMyAdmin\Html\Generator;
 use PhpMyAdmin\Html\MySQLDocumentation;
+use PhpMyAdmin\Query\Compatibility;
 use PhpMyAdmin\Query\Utilities;
 use PhpMyAdmin\SqlParser\Components\Expression;
 use PhpMyAdmin\SqlParser\Context;
@@ -36,7 +37,6 @@ use function floatval;
 use function floor;
 use function fread;
 use function function_exists;
-use function html_entity_decode;
 use function htmlentities;
 use function htmlspecialchars;
 use function htmlspecialchars_decode;
@@ -71,6 +71,7 @@ use function set_time_limit;
 use function sort;
 use function sprintf;
 use function str_contains;
+use function str_getcsv;
 use function str_pad;
 use function str_replace;
 use function strcasecmp;
@@ -324,7 +325,9 @@ class Util
 
         $tableGroups = [];
 
-        foreach ($tables as $tableName => $table) {
+        foreach ($tables as $table) {
+            /** @var string $tableName */
+            $tableName = $table['TABLE_NAME'];
             $table['Rows'] = self::checkRowCount($db, $table);
 
             // in $group we save the reference to the place in $table_groups
@@ -875,11 +878,7 @@ class Util
         $isBinaryString = $meta->isType(FieldMetadata::TYPE_STRING) && $meta->isBinary();
         // 63 is the binary charset, see: https://dev.mysql.com/doc/internals/en/charsets.html
         $isBlobAndIsBinaryCharset = $meta->isType(FieldMetadata::TYPE_BLOB) && $meta->charsetnr === 63;
-        // timestamp is numeric on some MySQL 4.1
-        // for real we use CONCAT above and it should compare to string
-        // See commit: 049fc7fef7548c2ba603196937c6dcaf9ff9bf00
-        // See bug: https://sourceforge.net/p/phpmyadmin/bugs/3064/
-        if ($meta->isNumeric && ! $meta->isMappedTypeTimestamp && $meta->isNotType(FieldMetadata::TYPE_REAL)) {
+        if ($meta->isNumeric) {
             $conditionValue = '= ' . $row;
         } elseif ($isBlobAndIsBinaryCharset || (! empty($row) && $isBinaryString)) {
             // hexify only if this is a true not empty BLOB or a BINARY
@@ -911,7 +910,7 @@ class Util
                 . self::printableBitValue((int) $row, (int) $meta->length) . "'";
         } else {
             $conditionValue = '= \''
-                . $dbi->escapeString($row) . '\'';
+                . $dbi->escapeString((string) $row) . '\'';
         }
 
         return [$conditionValue, $condition];
@@ -1267,6 +1266,7 @@ class Util
         SessionCache::remove('is_createuser');
         SessionCache::remove('is_grantuser');
         SessionCache::remove('mysql_cur_user');
+        SessionCache::remove('mysql_cur_role');
     }
 
     /**
@@ -1373,6 +1373,7 @@ class Util
             $binary = false;
             $unsigned = false;
             $zerofill = false;
+            $compressed = false;
         } else {
             $enumSetValues = [];
 
@@ -1394,6 +1395,8 @@ class Util
             $zerofill = ($zerofillCount > 0);
             $printType = (string) preg_replace('@unsigned@', '', $printType, -1, $unsignedCount);
             $unsigned = ($unsignedCount > 0);
+            $printType = (string) preg_replace('@\/\*!100301 compressed\*\/@', '', $printType, -1, $compressedCount);
+            $compressed = ($compressedCount > 0);
             $printType = trim($printType);
         }
 
@@ -1408,6 +1411,14 @@ class Util
 
         if ($zerofill) {
             $attribute = 'UNSIGNED ZEROFILL';
+        }
+
+        if ($compressed) {
+            // With InnoDB page compression, multiple compression algorithms are supported.
+            // In contrast, with InnoDB's COMPRESSED row format, zlib is the only supported compression algorithm.
+            // This means that the COMPRESSED row format has less compression options than InnoDB page compression does.
+            // @see https://mariadb.com/kb/en/innodb-page-compression/#comparison-with-the-compressed-row-format
+            $attribute = 'COMPRESSED=zlib';
         }
 
         $canContainCollation = false;
@@ -1750,6 +1761,14 @@ class Util
     }
 
     /**
+     * This function is to check whether database support UUID
+     */
+    public static function isUUIDSupported(): bool
+    {
+        return Compatibility::isUUIDSupported($GLOBALS['dbi']);
+    }
+
+    /**
      * Checks if the current user has a specific privilege and returns true if the
      * user indeed has that privilege or false if they don't. This function must
      * only be used for features that are available since MySQL 5, because it
@@ -1885,46 +1904,21 @@ class Util
      */
     public static function parseEnumSetValues($definition, $escapeHtml = true)
     {
-        $valuesString = htmlentities($definition, ENT_COMPAT, 'UTF-8');
         // There is a JS port of the below parser in functions.js
         // If you are fixing something here,
         // you need to also update the JS port.
+
+        // This should really be delegated to MySQL but since we also want to HTML encode it,
+        // it is easier this way.
+        // It future replace str_getcsv with $dbi->fetchSingleRow('SELECT '.$expressionInBrackets[1]);
+
+        preg_match('/\((.*)\)/', $definition, $expressionInBrackets);
+        $matches = str_getcsv($expressionInBrackets[1], ',', "'", '\\');
+
         $values = [];
-        $inString = false;
-        $buffer = '';
-
-        for ($i = 0, $length = mb_strlen($valuesString); $i < $length; $i++) {
-            $curr = mb_substr($valuesString, $i, 1);
-            $next = $i == mb_strlen($valuesString) - 1
-                ? ''
-                : mb_substr($valuesString, $i + 1, 1);
-
-            if (! $inString && $curr == "'") {
-                $inString = true;
-            } elseif (($inString && $curr === '\\') && $next === '\\') {
-                $buffer .= '&#92;';
-                $i++;
-            } elseif (($inString && $next == "'") && ($curr == "'" || $curr === '\\')) {
-                $buffer .= '&#39;';
-                $i++;
-            } elseif ($inString && $curr == "'") {
-                $inString = false;
-                $values[] = $buffer;
-                $buffer = '';
-            } elseif ($inString) {
-                $buffer .= $curr;
-            }
-        }
-
-        if (strlen($buffer) > 0) {
-            // The leftovers in the buffer are the last value (if any)
-            $values[] = $buffer;
-        }
-
-        if (! $escapeHtml) {
-            foreach ($values as $key => $value) {
-                $values[$key] = html_entity_decode($value, ENT_QUOTES, 'UTF-8');
-            }
+        foreach ($matches as $value) {
+            $value = strtr($value, ['\\\\' => '\\']); // str_getcsv doesn't unescape backslashes so we do it ourselves
+            $values[] = $escapeHtml ? htmlspecialchars($value, ENT_QUOTES, 'UTF-8') : $value;
         }
 
         return $values;
@@ -2008,7 +2002,7 @@ class Util
      */
     public static function addMicroseconds($value)
     {
-        if (empty($value) || $value === 'CURRENT_TIMESTAMP' || $value === 'current_timestamp()') {
+        if ($value === '' || preg_match('/^current_timestamp(\([0-6]?\))?$/i', $value)) {
             return $value;
         }
 
@@ -2272,18 +2266,15 @@ class Util
                 }
             }
 
-            $tables = array_merge(
-                $groupTable,
-                $dbi->getTablesFull(
-                    $db,
-                    $groupWithSeparator !== false ? $groupWithSeparator : '',
-                    $groupWithSeparator !== false,
-                    $limitOffset,
-                    $limitCount,
-                    $sort,
-                    $sortOrder,
-                    $tableType
-                )
+            $tables = $groupTable + $dbi->getTablesFull(
+                $db,
+                $groupWithSeparator !== false ? $groupWithSeparator : $tables,
+                $groupWithSeparator !== false,
+                $limitOffset,
+                $limitCount,
+                $sort,
+                $sortOrder,
+                $tableType
             );
         }
 
@@ -2386,10 +2377,7 @@ class Util
                 }
 
                 if (count($names) > 0) {
-                    $tables = array_merge(
-                        $tables,
-                        $dbi->getTablesFull($db, $names)
-                    );
+                    $tables += $dbi->getTablesFull($db, $names);
                 }
 
                 if ($GLOBALS['cfg']['NaturalOrder']) {
@@ -2431,6 +2419,10 @@ class Util
 
         if (extension_loaded('mbstring')) {
             $result[] = 'mbstring';
+        }
+
+        if (extension_loaded('sodium')) {
+            $result[] = 'sodium';
         }
 
         return $result;
@@ -2623,9 +2615,9 @@ class Util
             $urlParams['tbl_group'] = $_REQUEST['tbl_group'];
         }
 
-        $url = Url::getFromRoute('/database/structure');
+        $url = Url::getFromRoute('/database/structure', $urlParams, false);
 
-        return Generator::linkOrButton($url, $urlParams, $title . $orderImg, $orderLinkParams);
+        return Generator::linkOrButton($url, null, $title . $orderImg, $orderLinkParams);
     }
 
     /**

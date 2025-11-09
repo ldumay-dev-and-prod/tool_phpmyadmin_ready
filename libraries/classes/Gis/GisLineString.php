@@ -52,13 +52,14 @@ class GisLineString extends GisGeometry
      * @param string $spatial spatial data of a row
      *
      * @return array an array containing the min, max values for x and y coordinates
+     * @psalm-return array{minX:float,minY:float,maxX:float,maxY:float}
      */
     public function scaleRow($spatial)
     {
         // Trim to remove leading 'LINESTRING(' and trailing ')'
         $linestring = mb_substr($spatial, 11, -1);
 
-        return $this->setMinMax($linestring, []);
+        return $this->setMinMax($linestring, GisGeometry::EMPTY_EXTENT);
     }
 
     /**
@@ -161,8 +162,8 @@ class GisLineString extends GisGeometry
 
         // print label
         if ($label !== '') {
-            $pdf->SetXY($points_arr[1][0], $points_arr[1][1]);
-            $pdf->SetFontSize(5);
+            $pdf->setXY($points_arr[1][0], $points_arr[1][1]);
+            $pdf->setFontSize(5);
             $pdf->Cell(0, 0, $label);
         }
 
@@ -182,7 +183,7 @@ class GisLineString extends GisGeometry
     public function prepareRowAsSvg($spatial, $label, $line_color, array $scale_data)
     {
         $line_options = [
-            'name' => $label,
+            'data-label' => $label,
             'id' => $label . $this->getRandomId(),
             'class' => 'linestring vector',
             'fill' => 'none',

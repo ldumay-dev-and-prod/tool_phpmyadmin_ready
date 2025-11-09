@@ -12,7 +12,7 @@ use function array_splice;
 use function count;
 use function defined;
 use function error_reporting;
-use function headers_sent;
+use function get_class;
 use function htmlspecialchars;
 use function set_error_handler;
 use function set_exception_handler;
@@ -27,7 +27,6 @@ use const E_ERROR;
 use const E_NOTICE;
 use const E_PARSE;
 use const E_RECOVERABLE_ERROR;
-use const E_STRICT;
 use const E_USER_DEPRECATED;
 use const E_USER_ERROR;
 use const E_USER_NOTICE;
@@ -229,18 +228,22 @@ class ErrorHandler
 
     /**
      * Hides exception if it's not in the development environment.
-     *
-     * @throws Throwable
      */
     public function handleException(Throwable $exception): void
     {
         $config = $GLOBALS['config'] ?? null;
-        $environment = $config instanceof Config ? $config->get('environment') : 'production';
-        if ($environment !== 'development') {
-            return;
+        $this->hideLocation = ! $config instanceof Config || $config->get('environment') !== 'development';
+        $message = get_class($exception);
+        if (! ($exception instanceof \Error) || ! $this->hideLocation) {
+            $message .= ': ' . $exception->getMessage();
         }
 
-        throw $exception;
+        $this->addError(
+            $message,
+            (int) $exception->getCode(),
+            $exception->getFile(),
+            $exception->getLine()
+        );
     }
 
     /**
@@ -275,11 +278,14 @@ class ErrorHandler
         $error = new Error($errno, $errstr, $errfile, $errline);
         $error->setHideLocation($this->hideLocation);
 
-        // do not repeat errors
-        $this->errors[$error->getHash()] = $error;
+        // Deprecation errors will be shown in development environment, as they will have a different number.
+        if ($error->getNumber() !== E_DEPRECATED) {
+            // do not repeat errors
+            $this->errors[$error->getHash()] = $error;
+        }
 
         switch ($error->getNumber()) {
-            case E_STRICT:
+            case 2048: // E_STRICT
             case E_DEPRECATED:
             case E_NOTICE:
             case E_WARNING:
@@ -303,7 +309,9 @@ class ErrorHandler
             default:
                 // FATAL error, display it and exit
                 $this->dispFatalError($error);
-                exit;
+                if (! defined('TESTSUITE')) {
+                    exit; // @codeCoverageIgnore
+                }
         }
     }
 
@@ -328,13 +336,19 @@ class ErrorHandler
      */
     protected function dispFatalError(Error $error): void
     {
-        if (! headers_sent()) {
-            $this->dispPageStart($error);
+        $response = ResponseRenderer::getInstance();
+        if (! $response->headersSent()) {
+            $response->disable();
+            $response->addHTML('<html><head><title>');
+            $response->addHTML($error->getTitle());
+            $response->addHTML('</title></head>' . "\n");
         }
 
-        echo $error->getDisplay();
-        $this->dispPageEnd();
-        exit;
+        $response->addHTML($error->getDisplay());
+        $response->addHTML('</body></html>');
+        if (! defined('TESTSUITE')) {
+            exit;
+        }
     }
 
     /**
@@ -360,32 +374,6 @@ class ErrorHandler
         }
 
         return $retval;
-    }
-
-    /**
-     * display HTML header
-     *
-     * @param Error $error the error
-     */
-    protected function dispPageStart(?Error $error = null): void
-    {
-        ResponseRenderer::getInstance()->disable();
-        echo '<html><head><title>';
-        if ($error) {
-            echo $error->getTitle();
-        } else {
-            echo 'phpMyAdmin error reporting page';
-        }
-
-        echo '</title></head>';
-    }
-
-    /**
-     * display HTML footer
-     */
-    protected function dispPageEnd(): void
-    {
-        echo '</body></html>';
     }
 
     /**
